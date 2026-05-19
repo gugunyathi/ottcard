@@ -108,6 +108,34 @@ export function useWallet() {
     return { ok: true, message: `R ${amount.toFixed(2)} added`, amount };
   }, []);
 
+  const topUpExternal = useCallback(
+    (amount: number, source: "card" | "applepay" | "googlepay"): { ok: boolean; message: string } => {
+      if (!amount || amount <= 0) return { ok: false, message: "Enter an amount" };
+      const label =
+        source === "card" ? "Card top up" : source === "applepay" ? "Apple Pay top up" : "Google Pay top up";
+      setState((p) => ({
+        ...p,
+        balance: p.balance + amount,
+        txs: [
+          { id: crypto.randomUUID(), type: "topup", amount, note: label, at: Date.now() },
+          ...p.txs,
+        ],
+        notifs: [
+          {
+            id: crypto.randomUUID(),
+            title: "Top up successful",
+            body: `R ${amount.toFixed(2)} added via ${label.replace(" top up", "")}.`,
+            at: Date.now(),
+            read: false,
+          },
+          ...p.notifs,
+        ],
+      }));
+      return { ok: true, message: `R ${amount.toFixed(2)} added` };
+    },
+    [],
+  );
+
   const spend = useCallback(
     (amount: number, method: "tap" | "scan" | "pin", note?: string): { ok: boolean; message: string; pin?: string } => {
       if (!amount || amount <= 0) return { ok: false, message: "Enter an amount" };
@@ -185,6 +213,7 @@ export function useWallet() {
     txs: s.txs,
     notifs: s.notifs,
     topUp,
+    topUpExternal,
     spend,
     withdraw,
     markAllRead,
