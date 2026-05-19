@@ -12,6 +12,12 @@ import {
   Copy,
   History,
   Trash2,
+  CreditCard,
+  Apple,
+  Smartphone,
+  Ticket,
+  Loader2,
+  Fingerprint,
 } from "lucide-react";
 import { VirtualCard } from "@/components/VirtualCard";
 import { useWallet, formatZAR, type Tx } from "@/lib/wallet-store";
