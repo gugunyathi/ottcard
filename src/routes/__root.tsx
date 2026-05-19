@@ -72,11 +72,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "OTT Virtual Card – Tap, Scan or PIN to Pay" },
+      {
+        name: "description",
+        content:
+          "Mobile virtual debit card powered by OTT Vouchers. Top up with a 12-digit PIN, then tap, scan or generate a PIN to pay.",
+      },
+      { property: "og:title", content: "OTT Virtual Card" },
+      {
+        property: "og:description",
+        content: "Spend OTT Vouchers anywhere with tap, scan, or 12-digit PIN payments.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
