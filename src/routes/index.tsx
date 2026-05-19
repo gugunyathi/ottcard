@@ -263,12 +263,13 @@ function TopUpDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Top up with voucher</DialogTitle>
-          <DialogDescription>
-            Enter the 12-digit PIN from your OTT Voucher.
-          </DialogDescription>
+          <DialogTitle>Top up your card</DialogTitle>
+          <DialogDescription>Choose a payment method</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <TopUpMethodPicker
+          onClose={() => onOpenChange(false)}
+          voucherView={
+            <div className="space-y-3">
           <Label htmlFor="pin">Voucher PIN</Label>
           <Input
             id="pin"
@@ -296,17 +297,320 @@ function TopUpDialog({
               ))}
             </ul>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={pin.length !== 12}>
-            Redeem
-          </Button>
-        </DialogFooter>
+              <DialogFooter className="pt-2">
+                <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={submit} disabled={pin.length !== 12}>
+                  Redeem
+                </Button>
+              </DialogFooter>
+            </div>
+          }
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+type TopUpMethod = "voucher" | "card" | "applepay" | "googlepay";
+
+function TopUpMethodPicker({
+  voucherView,
+  onClose,
+}: {
+  voucherView: React.ReactNode;
+  onClose: () => void;
+}) {
+  const [method, setMethod] = useState<TopUpMethod>("voucher");
+
+  const tabs: { id: TopUpMethod; label: string; icon: React.ReactNode }[] = [
+    { id: "voucher", label: "Voucher", icon: <Ticket className="h-4 w-4" /> },
+    { id: "card", label: "Card", icon: <CreditCard className="h-4 w-4" /> },
+    { id: "applepay", label: "Apple Pay", icon: <Apple className="h-4 w-4" /> },
+    { id: "googlepay", label: "Google Pay", icon: <Smartphone className="h-4 w-4" /> },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-1 rounded-lg bg-slate-100 p-1">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setMethod(t.id)}
+            className={`flex flex-col items-center gap-1 rounded-md py-2 text-[10px] font-semibold transition ${
+              method === t.id ? "bg-white text-blue-600 shadow-sm" : "text-slate-500"
+            }`}
+          >
+            {t.icon}
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {method === "voucher" && voucherView}
+      {method === "card" && <CardTopUpForm onDone={onClose} />}
+      {method === "applepay" && <WalletTopUpForm source="applepay" onDone={onClose} />}
+      {method === "googlepay" && <WalletTopUpForm source="googlepay" onDone={onClose} />}
+    </div>
+  );
+}
+
+const QUICK_AMOUNTS = [50, 100, 200, 500];
+
+function CardTopUpForm({ onDone }: { onDone: () => void }) {
+  const w = useWallet();
+  const [amt, setAmt] = useState("");
+  const [number, setNumber] = useState("");
+  const [name, setName] = useState("");
+  const [exp, setExp] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [phase, setPhase] = useState<"form" | "processing" | "done">("form");
+
+  const amount = parseFloat(amt) || 0;
+  const numClean = number.replace(/\s/g, "");
+  const valid =
+    amount > 0 &&
+    numClean.length >= 12 &&
+    name.trim().length > 1 &&
+    /^\d{2}\/\d{2}$/.test(exp) &&
+    /^\d{3,4}$/.test(cvv);
+
+  const submit = () => {
+    if (!valid) return toast.error("Fill in all card details");
+    setPhase("processing");
+    setTimeout(() => {
+      const res = w.topUpExternal(amount, "card");
+      if (!res.ok) {
+        toast.error(res.message);
+        setPhase("form");
+        return;
+      }
+      setPhase("done");
+      setTimeout(() => {
+        toast.success(res.message);
+        onDone();
+      }, 900);
+    }, 1400);
+  };
+
+  if (phase === "processing")
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+        <p className="text-sm text-muted-foreground">Authorising card…</p>
+      </div>
+    );
+  if (phase === "done")
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white">
+          <Check className="h-7 w-7" />
+        </div>
+        <div className="font-semibold">Card charged</div>
+        <div className="text-sm text-muted-foreground">{formatZAR(amount)} added</div>
+      </div>
+    );
+
+  return (
+    <div className="space-y-3">
+      <AmountInput value={amt} onChange={setAmt} />
+      <div>
+        <Label htmlFor="ccnum" className="text-xs">Card number</Label>
+        <Input
+          id="ccnum"
+          inputMode="numeric"
+          placeholder="4242 4242 4242 4242"
+          value={number}
+          onChange={(e) => {
+            const v = e.target.value.replace(/\D/g, "").slice(0, 19);
+            setNumber(v.replace(/(.{4})/g, "$1 ").trim());
+          }}
+        />
+      </div>
+      <div>
+        <Label htmlFor="ccname" className="text-xs">Cardholder name</Label>
+        <Input
+          id="ccname"
+          placeholder="J. Doe"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label htmlFor="ccexp" className="text-xs">Expiry</Label>
+          <Input
+            id="ccexp"
+            placeholder="MM/YY"
+            maxLength={5}
+            value={exp}
+            onChange={(e) => {
+              let v = e.target.value.replace(/\D/g, "").slice(0, 4);
+              if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);
+              setExp(v);
+            }}
+          />
+        </div>
+        <div>
+          <Label htmlFor="cccvv" className="text-xs">CVV</Label>
+          <Input
+            id="cccvv"
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="123"
+            value={cvv}
+            onChange={(e) => setCvv(e.target.value.replace(/\D/g, ""))}
+          />
+        </div>
+      </div>
+      <DialogFooter className="pt-2">
+        <Button onClick={submit} disabled={!valid} className="w-full">
+          Pay {amount > 0 ? formatZAR(amount) : ""}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+function WalletTopUpForm({
+  source,
+  onDone,
+}: {
+  source: "applepay" | "googlepay";
+  onDone: () => void;
+}) {
+  const w = useWallet();
+  const [amt, setAmt] = useState("");
+  const [phase, setPhase] = useState<"amount" | "sheet" | "auth" | "done">("amount");
+  const amount = parseFloat(amt) || 0;
+
+  const isApple = source === "applepay";
+  const brand = isApple ? "Apple Pay" : "Google Pay";
+
+  const startSheet = () => {
+    if (amount <= 0) return toast.error("Enter an amount");
+    setPhase("sheet");
+  };
+  const authorise = () => {
+    setPhase("auth");
+    setTimeout(() => {
+      const res = w.topUpExternal(amount, source);
+      if (!res.ok) {
+        toast.error(res.message);
+        setPhase("amount");
+        return;
+      }
+      setPhase("done");
+      setTimeout(() => {
+        toast.success(res.message);
+        onDone();
+      }, 900);
+    }, 1300);
+  };
+
+  if (phase === "amount")
+    return (
+      <div className="space-y-3">
+        <AmountInput value={amt} onChange={setAmt} />
+        <DialogFooter className="pt-2">
+          <Button
+            onClick={startSheet}
+            disabled={amount <= 0}
+            className={`w-full ${
+              isApple ? "bg-black hover:bg-black/90" : "bg-slate-900 hover:bg-slate-900/90"
+            }`}
+          >
+            {isApple ? <Apple className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
+            Pay with {brand}
+          </Button>
+        </DialogFooter>
+      </div>
+    );
+
+  if (phase === "sheet")
+    return (
+      <div className="space-y-3 rounded-xl border bg-white p-4 shadow-inner">
+        <div className="flex items-center gap-2 border-b pb-3">
+          {isApple ? (
+            <Apple className="h-5 w-5" />
+          ) : (
+            <Smartphone className="h-5 w-5 text-blue-600" />
+          )}
+          <span className="font-semibold">{brand}</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Pay to</span>
+          <span className="font-medium">OTT Virtual Card</span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Card</span>
+          <span className="font-medium">•••• 4242</span>
+        </div>
+        <div className="flex justify-between border-t pt-3">
+          <span className="text-muted-foreground text-sm">Total</span>
+          <span className="text-lg font-bold">{formatZAR(amount)}</span>
+        </div>
+        <Button
+          onClick={authorise}
+          className={`w-full ${isApple ? "bg-black hover:bg-black/90" : "bg-slate-900 hover:bg-slate-900/90"}`}
+        >
+          <Fingerprint className="h-4 w-4" />
+          {isApple ? "Confirm with Face ID" : "Confirm with fingerprint"}
+        </Button>
+        <Button variant="ghost" className="w-full" onClick={() => setPhase("amount")}>
+          Cancel
+        </Button>
+      </div>
+    );
+
+  if (phase === "auth")
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <div className="relative flex h-20 w-20 items-center justify-center">
+          <span className="absolute inset-0 animate-ping rounded-full bg-blue-500/30" />
+          <Fingerprint className="relative h-10 w-10 text-blue-600" />
+        </div>
+        <p className="text-sm text-muted-foreground">Authenticating with {brand}…</p>
+      </div>
+    );
+
+  return (
+    <div className="flex flex-col items-center gap-3 py-8">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white">
+        <Check className="h-7 w-7" />
+      </div>
+      <div className="font-semibold">{brand} successful</div>
+      <div className="text-sm text-muted-foreground">{formatZAR(amount)} added</div>
+    </div>
+  );
+}
+
+function AmountInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="topupamt" className="text-xs">Amount (R)</Label>
+      <Input
+        id="topupamt"
+        inputMode="decimal"
+        placeholder="0.00"
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/[^\d.]/g, ""))}
+        className="text-lg font-semibold"
+      />
+      <div className="flex gap-2">
+        {QUICK_AMOUNTS.map((a) => (
+          <button
+            key={a}
+            type="button"
+            onClick={() => onChange(String(a))}
+            className="flex-1 rounded-md border border-slate-200 py-1.5 text-xs font-medium hover:bg-slate-50"
+          >
+            R{a}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
