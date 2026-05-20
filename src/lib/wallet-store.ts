@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 
-export type TxType = "topup" | "spend" | "withdraw";
+export type TxType = "topup" | "spend" | "withdraw" | "transfer-out" | "transfer-in";
 export interface Tx {
   id: string;
   type: TxType;
@@ -8,6 +8,7 @@ export interface Tx {
   note?: string;
   pin?: string;
   at: number;
+  counterparty?: string;
 }
 export interface Notif {
   id: string;
@@ -16,10 +17,52 @@ export interface Notif {
   at: number;
   read: boolean;
 }
+export interface Contact {
+  id: string;
+  name: string;
+  handle: string;
+  avatar?: string;
+}
+export interface FavMerchant {
+  id: string;
+  name: string;
+  category?: string;
+  lastAmount?: number;
+}
+export type SubInterval = "weekly" | "monthly" | "yearly";
+export interface Subscription {
+  id: string;
+  merchant: string;
+  amount: number;
+  interval: SubInterval;
+  nextDue: number;
+  active: boolean;
+}
+export type CardTheme =
+  | "ocean"
+  | "midnight"
+  | "sunset"
+  | "emerald"
+  | "rose"
+  | "graphite";
+
+export const CARD_THEMES: Record<CardTheme, { label: string; gradient: string }> = {
+  ocean: { label: "Ocean", gradient: "linear-gradient(135deg,#1f7ce0 0%,#1668c4 45%,#0f4f9c 100%)" },
+  midnight: { label: "Midnight", gradient: "linear-gradient(135deg,#1f2937 0%,#0f172a 50%,#020617 100%)" },
+  sunset: { label: "Sunset", gradient: "linear-gradient(135deg,#f97316 0%,#e11d48 60%,#7c3aed 100%)" },
+  emerald: { label: "Emerald", gradient: "linear-gradient(135deg,#10b981 0%,#047857 60%,#064e3b 100%)" },
+  rose: { label: "Rose", gradient: "linear-gradient(135deg,#fb7185 0%,#e11d48 60%,#881337 100%)" },
+  graphite: { label: "Graphite", gradient: "linear-gradient(135deg,#475569 0%,#334155 55%,#0f172a 100%)" },
+};
+
 interface WalletState {
   balance: number;
   txs: Tx[];
   notifs: Notif[];
+  contacts: Contact[];
+  favorites: FavMerchant[];
+  subscriptions: Subscription[];
+  cardTheme: CardTheme;
 }
 
 const KEY = "ott-wallet-v1";
@@ -30,14 +73,30 @@ const VALID_VOUCHERS: Record<string, number> = {
   "123412341234": 500,
 };
 
-const initial: WalletState = { balance: 0, txs: [], notifs: [] };
+const SEED_CONTACTS: Contact[] = [
+  { id: "c1", name: "Thabo M.", handle: "@thabo" },
+  { id: "c2", name: "Lerato K.", handle: "@lerato" },
+  { id: "c3", name: "Sipho N.", handle: "@sipho" },
+  { id: "c4", name: "Aisha P.", handle: "@aisha" },
+];
+
+const initial: WalletState = {
+  balance: 0,
+  txs: [],
+  notifs: [],
+  contacts: SEED_CONTACTS,
+  favorites: [],
+  subscriptions: [],
+  cardTheme: "ocean",
+};
 
 function read(): WalletState {
   if (typeof window === "undefined") return initial;
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return initial;
-    return JSON.parse(raw) as WalletState;
+    const parsed = JSON.parse(raw) as Partial<WalletState>;
+    return { ...initial, ...parsed };
   } catch {
     return initial;
   }
@@ -208,14 +267,123 @@ export function useWallet() {
     setState(() => initial);
   }, []);
 
+  const transfer = useCallback(
+    (contactId: string, amount: number, note?: string): { ok: boolean; message: string } => {
+      if (!amount || amount <= 0) return { ok: false, message: "Enter an amount" };
+      if (amount > getState().balance) return { ok: false, message: "Insufficient balance" };
+      const contact = getState().contacts.find((c) => c.id === contactId);
+      if (!contact) return { ok: false, message: "Pick a recipient" };
+      setState((p) => ({
+        ...p,
+        balance: p.balance - amount,
+        txs: [
+          {
+            id: crypto.randomUUID(),
+            type: "transfer-out",
+            amount,
+            note: note || `Sent to ${contact.name}`,
+            counterparty: contact.handle,
+            at: Date.now(),
+          },
+          ...p.txs,
+        ],
+        notifs: [
+          {
+            id: crypto.randomUUID(),
+            title: `Sent ${formatZAR(amount)}`,
+            body: `To ${contact.name} (${contact.handle})`,
+            at: Date.now(),
+            read: false,
+          },
+          ...p.notifs,
+        ],
+      }));
+      return { ok: true, message: `Sent to ${contact.name}` };
+    },
+    [],
+  );
+
+  const addContact = useCallback((name: string, handle: string) => {
+    const h = handle.startsWith("@") ? handle : `@${handle}`;
+    setState((p) => ({
+      ...p,
+      contacts: [{ id: crypto.randomUUID(), name, handle: h }, ...p.contacts],
+    }));
+  }, []);
+
+  const addFavorite = useCallback((m: Omit<FavMerchant, "id">) => {
+    setState((p) => {
+      if (p.favorites.some((f) => f.name.toLowerCase() === m.name.toLowerCase())) return p;
+      return { ...p, favorites: [{ id: crypto.randomUUID(), ...m }, ...p.favorites] };
+    });
+  }, []);
+
+  const removeFavorite = useCallback((id: string) => {
+    setState((p) => ({ ...p, favorites: p.favorites.filter((f) => f.id !== id) }));
+  }, []);
+
+  const addSubscription = useCallback(
+    (merchant: string, amount: number, interval: SubInterval) => {
+      const ms =
+        interval === "weekly" ? 7 * 864e5 : interval === "monthly" ? 30 * 864e5 : 365 * 864e5;
+      setState((p) => ({
+        ...p,
+        subscriptions: [
+          {
+            id: crypto.randomUUID(),
+            merchant,
+            amount,
+            interval,
+            nextDue: Date.now() + ms,
+            active: true,
+          },
+          ...p.subscriptions,
+        ],
+      }));
+    },
+    [],
+  );
+
+  const toggleSubscription = useCallback((id: string) => {
+    setState((p) => ({
+      ...p,
+      subscriptions: p.subscriptions.map((s) =>
+        s.id === id ? { ...s, active: !s.active } : s,
+      ),
+    }));
+  }, []);
+
+  const removeSubscription = useCallback((id: string) => {
+    setState((p) => ({
+      ...p,
+      subscriptions: p.subscriptions.filter((s) => s.id !== id),
+    }));
+  }, []);
+
+  const setCardTheme = useCallback((theme: CardTheme) => {
+    setState((p) => ({ ...p, cardTheme: theme }));
+  }, []);
+
   return {
     balance: s.balance,
     txs: s.txs,
     notifs: s.notifs,
+    contacts: s.contacts,
+    favorites: s.favorites,
+    subscriptions: s.subscriptions,
+    cardTheme: s.cardTheme,
     topUp,
     topUpExternal,
     spend,
     withdraw,
+    transfer,
+    addContact,
+    addFavorite,
+    removeFavorite,
+    addSubscription,
+    toggleSubscription,
+    removeSubscription,
+    setCardTheme,
     markAllRead,
     pushNotif,
     reset,
