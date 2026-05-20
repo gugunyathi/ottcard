@@ -21,6 +21,12 @@ import {
 } from "lucide-react";
 import { VirtualCard } from "@/components/VirtualCard";
 import { useWallet, formatZAR, type Tx } from "@/lib/wallet-store";
+import { BottomNav, type TabKey } from "@/components/BottomNav";
+import { SendTab } from "@/components/tabs/SendTab";
+import { PlacesTab } from "@/components/tabs/PlacesTab";
+import { MoreTab } from "@/components/tabs/MoreTab";
+import { PWAInstallBanner } from "@/components/PWAInstall";
+import { useDarkMode } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +55,8 @@ type SpendMethod = "tap" | "scan" | "pin";
 
 function Index() {
   const w = useWallet();
+  useDarkMode();
+  const [tab, setTab] = useState<TabKey>("home");
   const [topupOpen, setTopupOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [spendMethod, setSpendMethod] = useState<SpendMethod | null>(null);
@@ -59,21 +67,23 @@ function Index() {
   const unread = w.notifs.filter((n) => !n.read).length;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-10">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 dark:text-slate-100 pb-24">
       <Toaster position="top-center" richColors />
       {/* App header */}
-      <header className="sticky top-0 z-10 border-b bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b bg-white/85 dark:bg-slate-950/85 dark:border-slate-800 backdrop-blur">
         <div className="mx-auto flex max-w-md items-center justify-between px-4 py-3">
           <div>
             <div className="text-xs text-muted-foreground">Welcome</div>
-            <div className="text-sm font-semibold">OTT Virtual Card</div>
+            <div className="text-sm font-semibold">
+              {tab === "home" ? "OTT Virtual Card" : tab === "send" ? "Send money" : tab === "places" ? "Merchants" : "More"}
+            </div>
           </div>
           <button
             onClick={() => {
               setNotifOpen(true);
               w.markAllRead();
             }}
-            className="relative rounded-full p-2 hover:bg-slate-100"
+            className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
@@ -87,7 +97,10 @@ function Index() {
       </header>
 
       <main className="mx-auto max-w-md px-4 pt-6">
-        <VirtualCard balance={w.balance} />
+        <PWAInstallBanner />
+        {tab === "home" && (
+          <>
+        <VirtualCard balance={w.balance} theme={w.cardTheme} />
 
         {/* Primary actions */}
         <div className="mt-6 grid grid-cols-2 gap-3">
@@ -143,7 +156,7 @@ function Index() {
               See all
             </button>
           </div>
-          <div className="rounded-xl border bg-white">
+          <div className="rounded-xl border bg-white dark:bg-slate-900 dark:border-slate-800">
             {w.txs.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
                 <History className="h-6 w-6 opacity-50" />
@@ -170,6 +183,12 @@ function Index() {
             <Trash2 className="h-3 w-3" /> Reset demo wallet
           </button>
         )}
+          </>
+        )}
+
+        {tab === "send" && <SendTab />}
+        {tab === "places" && <PlacesTab />}
+        {tab === "more" && <MoreTab />}
       </main>
 
       <TopUpDialog open={topupOpen} onOpenChange={setTopupOpen} />
@@ -185,6 +204,7 @@ function Index() {
       />
       <HistorySheet open={historyOpen} onOpenChange={setHistoryOpen} />
       <NotificationsSheet open={notifOpen} onOpenChange={setNotifOpen} />
+      <BottomNav active={tab} onChange={setTab} />
     </div>
   );
 }
@@ -218,12 +238,21 @@ function ActionTile({
 }
 
 function TxRow({ t }: { t: Tx }) {
-  const sign = t.type === "topup" ? "+" : "-";
-  const color = t.type === "topup" ? "text-emerald-600" : "text-slate-900";
+  const incoming = t.type === "topup" || t.type === "transfer-in";
+  const sign = incoming ? "+" : "-";
+  const color = incoming ? "text-emerald-600" : "text-slate-900 dark:text-slate-100";
   const label =
-    t.type === "topup" ? "Top up" : t.type === "withdraw" ? "Withdraw" : t.note || "Payment";
+    t.type === "topup"
+      ? "Top up"
+      : t.type === "withdraw"
+        ? "Withdraw"
+        : t.type === "transfer-out"
+          ? t.note || `Sent ${t.counterparty ?? ""}`.trim()
+          : t.type === "transfer-in"
+            ? t.note || `Received ${t.counterparty ?? ""}`.trim()
+            : t.note || "Payment";
   return (
-    <div className="flex items-center justify-between border-b px-4 py-3 last:border-b-0">
+    <div className="flex items-center justify-between border-b dark:border-slate-800 px-4 py-3 last:border-b-0">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{label}</div>
         <div className="text-[11px] text-muted-foreground">

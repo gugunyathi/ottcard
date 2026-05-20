@@ -1,13 +1,19 @@
-import { formatZAR } from "@/lib/wallet-store";
+import { CARD_THEMES, formatZAR, type CardTheme } from "@/lib/wallet-store";
 
-export function VirtualCard({ balance }: { balance: number }) {
+export function VirtualCard({
+  balance,
+  theme = "ocean",
+}: {
+  balance: number;
+  theme?: CardTheme;
+}) {
+  const gradient = CARD_THEMES[theme]?.gradient ?? CARD_THEMES.ocean.gradient;
   return (
     <div className="relative mx-auto w-full max-w-sm">
       <div
         className="relative overflow-hidden rounded-2xl p-5 text-white shadow-xl"
         style={{
-          background:
-            "linear-gradient(135deg, #1f7ce0 0%, #1668c4 45%, #0f4f9c 100%)",
+          background: gradient,
           aspectRatio: "1.586 / 1",
         }}
       >
