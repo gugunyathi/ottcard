@@ -238,12 +238,21 @@ function ActionTile({
 }
 
 function TxRow({ t }: { t: Tx }) {
-  const sign = t.type === "topup" ? "+" : "-";
-  const color = t.type === "topup" ? "text-emerald-600" : "text-slate-900";
+  const incoming = t.type === "topup" || t.type === "transfer-in";
+  const sign = incoming ? "+" : "-";
+  const color = incoming ? "text-emerald-600" : "text-slate-900 dark:text-slate-100";
   const label =
-    t.type === "topup" ? "Top up" : t.type === "withdraw" ? "Withdraw" : t.note || "Payment";
+    t.type === "topup"
+      ? "Top up"
+      : t.type === "withdraw"
+        ? "Withdraw"
+        : t.type === "transfer-out"
+          ? t.note || `Sent ${t.counterparty ?? ""}`.trim()
+          : t.type === "transfer-in"
+            ? t.note || `Received ${t.counterparty ?? ""}`.trim()
+            : t.note || "Payment";
   return (
-    <div className="flex items-center justify-between border-b px-4 py-3 last:border-b-0">
+    <div className="flex items-center justify-between border-b dark:border-slate-800 px-4 py-3 last:border-b-0">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{label}</div>
         <div className="text-[11px] text-muted-foreground">
