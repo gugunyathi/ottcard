@@ -88,21 +88,32 @@ function Index() {
               {tab === "home" ? "OTT Virtual Card" : tab === "send" ? "Send money" : tab === "places" ? "Merchants" : "More"}
             </div>
           </div>
-          <button
-            onClick={() => {
-              setNotifOpen(true);
-              w.markAllRead();
-            }}
-            className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5" />
-            {unread > 0 && (
-              <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                {unread}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setProfileOpen(true)}
+              className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="Profile"
+            >
+              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-[10px] font-bold text-white">
+                {w.profile.initials}
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                setNotifOpen(true);
+                w.markAllRead();
+              }}
+              className="relative rounded-full p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="Notifications"
+            >
+              <Bell className="h-5 w-5" />
+              {unread > 0 && (
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unread}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
