@@ -1,5 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 
+export interface UserProfile {
+  name: string;
+  email: string;
+  phone: string;
+  initials: string;
+  memberSince: number;
+}
+
 export type TxType = "topup" | "spend" | "withdraw" | "transfer-out" | "transfer-in";
 export interface Tx {
   id: string;
@@ -63,6 +71,7 @@ interface WalletState {
   favorites: FavMerchant[];
   subscriptions: Subscription[];
   cardTheme: CardTheme;
+  profile: UserProfile;
 }
 
 const KEY = "ott-wallet-v1";
@@ -88,6 +97,13 @@ const initial: WalletState = {
   favorites: [],
   subscriptions: [],
   cardTheme: "ocean",
+  profile: {
+    name: "Alex Mokoena",
+    email: "alex.m@email.com",
+    phone: "+27 82 555 0199",
+    initials: "AM",
+    memberSince: Date.now() - 1000 * 60 * 60 * 24 * 180,
+  },
 };
 
 function read(): WalletState {
@@ -364,6 +380,10 @@ export function useWallet() {
     setState((p) => ({ ...p, cardTheme: theme }));
   }, []);
 
+  const updateProfile = useCallback((updates: Partial<UserProfile>) => {
+    setState((p) => ({ ...p, profile: { ...p.profile, ...updates } }));
+  }, []);
+
   return {
     balance: s.balance,
     txs: s.txs,
@@ -372,6 +392,7 @@ export function useWallet() {
     favorites: s.favorites,
     subscriptions: s.subscriptions,
     cardTheme: s.cardTheme,
+    profile: s.profile,
     topUp,
     topUpExternal,
     spend,
@@ -384,6 +405,7 @@ export function useWallet() {
     toggleSubscription,
     removeSubscription,
     setCardTheme,
+    updateProfile,
     markAllRead,
     pushNotif,
     reset,
