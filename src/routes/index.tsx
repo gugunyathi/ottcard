@@ -18,6 +18,15 @@ import {
   Ticket,
   Loader2,
   Fingerprint,
+  User,
+  Search,
+  TrendingUp,
+  TrendingDown,
+  ChevronRight,
+  Shield,
+  Mail,
+  Phone,
+  Calendar,
 } from "lucide-react";
 import { VirtualCard } from "@/components/VirtualCard";
 import { useWallet, formatZAR, type Tx } from "@/lib/wallet-store";
