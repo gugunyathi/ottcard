@@ -71,6 +71,7 @@ function Index() {
   const [spendMethod, setSpendMethod] = useState<SpendMethod | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [pinResult, setPinResult] = useState<{ pin: string; amount: number } | null>(null);
 
   const unread = w.notifs.filter((n) => !n.read).length;
