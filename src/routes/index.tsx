@@ -225,6 +225,7 @@ function Index() {
       />
       <HistorySheet open={historyOpen} onOpenChange={setHistoryOpen} />
       <NotificationsSheet open={notifOpen} onOpenChange={setNotifOpen} />
+      <ProfileSheet open={profileOpen} onOpenChange={setProfileOpen} />
       <BottomNav active={tab} onChange={setTab} />
     </div>
   );
