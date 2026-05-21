@@ -911,21 +911,197 @@ function HistorySheet({
   onOpenChange: (b: boolean) => void;
 }) {
   const w = useWallet();
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return w.txs;
+    const q = search.toLowerCase();
+    return w.txs.filter((t) => {
+      const label =
+        t.type === "topup"
+          ? "Top up"
+          : t.type === "withdraw"
+            ? "Withdraw"
+            : t.type === "transfer-out"
+              ? t.note || `Sent ${t.counterparty ?? ""}`.trim()
+              : t.type === "transfer-in"
+                ? t.note || `Received ${t.counterparty ?? ""}`.trim()
+                : t.note || "Payment";
+      return label.toLowerCase().includes(q) || String(t.amount).includes(q);
+    });
+  }, [w.txs, search]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, Tx[]>();
+    for (const t of filtered) {
+      const date = new Date(t.at).toLocaleDateString(undefined, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      if (!map.has(date)) map.set(date, []);
+      map.get(date)!.push(t);
+    }
+    return Array.from(map.entries());
+  }, [filtered]);
+
+  const totalTopup = w.txs.filter((t) => t.type === "topup").reduce((s, t) => s + t.amount, 0);
+  const totalSpend = w.txs
+    .filter((t) => t.type === "spend" || t.type === "transfer-out" || t.type === "withdraw")
+    .reduce((s, t) => s + t.amount, 0);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[85vh]">
-        <SheetHeader>
-          <SheetTitle>Transaction history</SheetTitle>
-          <SheetDescription>All activity on your virtual card</SheetDescription>
-        </SheetHeader>
-        <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-xl border bg-white">
-          {w.txs.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              Nothing here yet.
+      <SheetContent side="bottom" className="h-[85vh] p-0">
+        <div className="mx-auto max-w-md px-4 pt-6">
+          <SheetHeader className="text-left">
+            <SheetTitle>Transaction history</SheetTitle>
+            <SheetDescription>All activity on your virtual card</SheetDescription>
+          </SheetHeader>
+
+          {/* Summary stats */}
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950/30 p-3">
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                <TrendingUp className="h-3 w-3" /> Total in
+              </div>
+              <div className="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-300">{formatZAR(totalTopup)}</div>
+            </div>
+            <div className="rounded-xl border bg-red-50 dark:bg-red-950/30 p-3">
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">
+                <TrendingDown className="h-3 w-3" /> Total out
+              </div>
+              <div className="mt-1 text-lg font-bold text-red-700 dark:text-red-300">{formatZAR(totalSpend)}</div>
+            </div>
+          </div>
+
+          {/* Search */}
+          <div className="relative mt-4">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search transactions…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl border bg-white dark:bg-slate-900 py-2.5 pl-9 pr-3 text-sm outline-none ring-blue-500 focus:ring-2"
+            />
+          </div>
+        </div>
+
+        <div className="mx-auto mt-4 max-w-md px-4 pb-8">
+          {filtered.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-xl border bg-white dark:bg-slate-900 py-12 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
+                <History className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div>
+                <div className="text-sm font-medium">No transactions yet</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Top up your card or make a payment to see activity here.
+                </div>
+              </div>
             </div>
           ) : (
-            w.txs.map((t) => <TxRow key={t.id} t={t} />)
+            <div className="max-h-[55vh] overflow-y-auto space-y-4 pr-1">
+              {grouped.map(([date, txs]) => (
+                <div key={date}>
+                  <div className="sticky top-0 z-10 mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-slate-50 dark:bg-slate-950 py-1">
+                    {date}
+                  </div>
+                  <div className="rounded-xl border bg-white dark:bg-slate-900 overflow-hidden">
+                    {txs.map((t) => (
+                      <TxRow key={t.id} t={t} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function ProfileSheet({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (b: boolean) => void;
+}) {
+  const w = useWallet();
+  const memberDate = new Date(w.profile.memberSince).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  const menuItems = [
+    { icon: <Shield className="h-4 w-4" />, label: "Security settings", hint: "PIN & biometric" },
+    { icon: <Mail className="h-4 w-4" />, label: w.profile.email, hint: "Email" },
+    { icon: <Phone className="h-4 w-4" />, label: w.profile.phone, hint: "Phone" },
+    { icon: <Calendar className="h-4 w-4" />, label: `Member since ${memberDate}`, hint: "Joined" },
+  ];
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-[88vw] sm:max-w-md p-0">
+        <div className="mx-auto max-w-md px-4 pt-6">
+          <SheetHeader className="text-left">
+            <SheetTitle>Profile</SheetTitle>
+            <SheetDescription>Your OTT Virtual Card account</SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 flex flex-col items-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xl font-bold text-white shadow-lg">
+              {w.profile.initials}
+            </div>
+            <div className="mt-3 text-lg font-bold">{w.profile.name}</div>
+            <div className="text-sm text-muted-foreground">{w.profile.email}</div>
+          </div>
+
+          {/* Stats */}
+          <div className="mt-6 grid grid-cols-3 gap-2">
+            <div className="rounded-xl border bg-white dark:bg-slate-900 p-3 text-center">
+              <div className="text-lg font-bold">{w.txs.length}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Txns</div>
+            </div>
+            <div className="rounded-xl border bg-white dark:bg-slate-900 p-3 text-center">
+              <div className="text-lg font-bold">{w.contacts.length}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Contacts</div>
+            </div>
+            <div className="rounded-xl border bg-white dark:bg-slate-900 p-3 text-center">
+              <div className="text-lg font-bold">{w.favorites.length}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Favorites</div>
+            </div>
+          </div>
+
+          {/* Menu */}
+          <div className="mt-6 space-y-2">
+            {menuItems.map((item, i) => (
+              <button
+                key={i}
+                onClick={() => toast.info(`${item.label} — coming soon`)}
+                className="flex w-full items-center justify-between rounded-xl border bg-white dark:bg-slate-900 px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-muted-foreground">{item.icon}</span>
+                  <div>
+                    <div className="text-sm font-medium">{item.label}</div>
+                    <div className="text-[11px] text-muted-foreground">{item.hint}</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+
+          {/* Card preview */}
+          <div className="mt-6">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Your card</div>
+            <VirtualCard balance={w.balance} theme={w.cardTheme} />
+          </div>
         </div>
       </SheetContent>
     </Sheet>
