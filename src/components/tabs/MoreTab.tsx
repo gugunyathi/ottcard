@@ -20,9 +20,25 @@ export function MoreTab() {
   const w = useWallet();
   const pwa = usePWAInstall();
   const [subOpen, setSubOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
 
   return (
     <div className="space-y-6">
+      <Section title="Account" icon={<User className="h-4 w-4" />}>
+        <div className="flex items-center gap-3 rounded-xl border bg-white dark:bg-slate-900 p-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-bold text-white">
+            {w.profile.initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold truncate">{w.profile.name}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{w.profile.email}</div>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setEditProfileOpen(true)}>
+            <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+          </Button>
+        </div>
+      </Section>
+
       <Section title="Card theme" icon={<Palette className="h-4 w-4" />}>
         <div className="grid grid-cols-3 gap-2">
           {(Object.entries(CARD_THEMES) as [CardTheme, { label: string; gradient: string }][]).map(
