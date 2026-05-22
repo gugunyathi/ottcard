@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Palette, Star, Repeat, Trash2, Plus, Check, Pause, Play } from "lucide-react";
+import { Palette, Star, Repeat, Trash2, Plus, Check, Pause, Play, User, Pencil } from "lucide-react";
 import { useWallet, formatZAR, CARD_THEMES, type CardTheme, type SubInterval } from "@/lib/wallet-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
