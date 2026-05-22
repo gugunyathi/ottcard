@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Plus,
@@ -723,11 +723,207 @@ function SpendDialog({
 }) {
   const w = useWallet();
   const [amt, setAmt] = useState("");
-  const [phase, setPhase] = useState<"input" | "processing" | "done">("input");
+  const [phase, setPhase] = useState<
+    "input" | "scanning" | "nfc" | "processing" | "done"
+  >("input");
+  const [merchant, setMerchant] = useState<string | null>(null);
+  const [nfcStatus, setNfcStatus] = useState<string>("");
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanRafRef = useRef<number | null>(null);
+  const nfcAbortRef = useRef<AbortController | null>(null);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const stopCamera = () => {
+    if (scanRafRef.current) cancelAnimationFrame(scanRafRef.current);
+    scanRafRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  };
+
+  const stopNfc = () => {
+    nfcAbortRef.current?.abort();
+    nfcAbortRef.current = null;
+    if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+    tapTimerRef.current = null;
+  };
 
   const reset = () => {
+    stopCamera();
+    stopNfc();
     setAmt("");
+    setMerchant(null);
+    setNfcStatus("");
     setPhase("input");
+  };
+
+  // When dialog opens, route directly into scan/nfc flows
+  useEffect(() => {
+    if (method === "scan") {
+      setPhase("scanning");
+      void startCameraScan();
+    } else if (method === "tap") {
+      setPhase("nfc");
+      void startNfc();
+    } else if (method === "pin") {
+      setPhase("input");
+    }
+    return () => {
+      stopCamera();
+      stopNfc();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [method]);
+
+  const completePayment = (amount: number, label?: string) => {
+    setPhase("processing");
+    setTimeout(() => {
+      const res = w.spend(amount, method ?? "tap", label);
+      if (res.ok) {
+        setAmt(String(amount));
+        setPhase("done");
+        setTimeout(() => {
+          reset();
+          onClose();
+        }, 1200);
+      } else {
+        toast.error(res.message);
+        reset();
+      }
+    }, 900);
+  };
+
+  const startCameraScan = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false,
+      });
+      streamRef.current = stream;
+      // wait for video element
+      await new Promise((r) => setTimeout(r, 50));
+      const video = videoRef.current;
+      if (!video) return;
+      video.srcObject = stream;
+      await video.play().catch(() => {});
+
+      // @ts-expect-error BarcodeDetector is not in TS lib by default
+      const Detector = window.BarcodeDetector;
+      if (!Detector) {
+        toast.error("QR scanning not supported on this device");
+        return;
+      }
+      const detector = new Detector({ formats: ["qr_code"] });
+      const tick = async () => {
+        if (!videoRef.current || !streamRef.current) return;
+        try {
+          const codes = await detector.detect(videoRef.current);
+          if (codes && codes.length > 0) {
+            handleQrResult(codes[0].rawValue ?? "");
+            return;
+          }
+        } catch {
+          /* ignore frame errors */
+        }
+        scanRafRef.current = requestAnimationFrame(tick);
+      };
+      scanRafRef.current = requestAnimationFrame(tick);
+    } catch (e) {
+      toast.error("Camera access denied");
+      reset();
+      onClose();
+    }
+  };
+
+  const handleQrResult = (raw: string) => {
+    stopCamera();
+    let amount = 0;
+    let label = "QR merchant";
+    try {
+      const parsed = JSON.parse(raw);
+      amount = Number(parsed.amount) || 0;
+      if (parsed.merchant) label = String(parsed.merchant);
+    } catch {
+      const m = raw.match(/(\d+(?:\.\d+)?)/);
+      if (m) amount = parseFloat(m[1]);
+      if (raw.length < 40) label = raw;
+    }
+    if (!amount || amount <= 0) {
+      toast.error("QR has no amount — enter manually");
+      setMerchant(label);
+      setPhase("input");
+      return;
+    }
+    if (amount > w.balance) {
+      toast.error("Insufficient balance");
+      reset();
+      return;
+    }
+    setMerchant(label);
+    completePayment(amount, label);
+  };
+
+  const startNfc = async () => {
+    // @ts-expect-error NDEFReader experimental
+    const NDEF = typeof window !== "undefined" ? window.NDEFReader : undefined;
+    if (NDEF) {
+      try {
+        const reader = new NDEF();
+        const ctrl = new AbortController();
+        nfcAbortRef.current = ctrl;
+        setNfcStatus("NFC active — hold near terminal");
+        await reader.scan({ signal: ctrl.signal });
+        reader.onreading = (event: any) => {
+          // Try to derive amount from NDEF text record
+          let amount = 0;
+          let label = "NFC terminal";
+          try {
+            for (const rec of event.message.records) {
+              if (rec.recordType === "text") {
+                const text = new TextDecoder().decode(rec.data);
+                const parsed = (() => {
+                  try {
+                    return JSON.parse(text);
+                  } catch {
+                    return null;
+                  }
+                })();
+                if (parsed?.amount) {
+                  amount = Number(parsed.amount);
+                  if (parsed.merchant) label = parsed.merchant;
+                } else {
+                  const m = text.match(/(\d+(?:\.\d+)?)/);
+                  if (m) amount = parseFloat(m[1]);
+                }
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+          if (amount > 0 && amount <= w.balance) {
+            completePayment(amount, label);
+          } else {
+            toast.error("Tap not recognised");
+          }
+        };
+        reader.onreadingerror = () => setNfcStatus("Move closer to the terminal");
+      } catch (e: any) {
+        setNfcStatus(
+          e?.name === "NotAllowedError"
+            ? "NFC permission denied"
+            : "NFC unavailable — simulating tap"
+        );
+        // demo fallback
+        tapTimerRef.current = setTimeout(() => {
+          completePayment(Math.min(75, w.balance), "Tap terminal");
+        }, 3000);
+      }
+    } else {
+      setNfcStatus("This device has no Web NFC — simulating tap");
+      tapTimerRef.current = setTimeout(() => {
+        completePayment(Math.min(75, w.balance), "Tap terminal");
+      }, 3000);
+    }
   };
 
   const submit = () => {
@@ -746,20 +942,7 @@ function SpendDialog({
       return;
     }
 
-    setPhase("processing");
-    setTimeout(() => {
-      const res = w.spend(amount, method);
-      if (res.ok) {
-        setPhase("done");
-        setTimeout(() => {
-          reset();
-          onClose();
-        }, 1100);
-      } else {
-        toast.error(res.message);
-        setPhase("input");
-      }
-    }, 1500);
+    completePayment(amount, merchant ?? undefined);
   };
 
   const titles: Record<SpendMethod, string> = {
@@ -788,6 +971,11 @@ function SpendDialog({
 
         {phase === "input" && (
           <div className="space-y-3">
+            {merchant && (
+              <div className="rounded-md bg-blue-50 dark:bg-blue-950/40 px-3 py-2 text-xs">
+                Merchant: <span className="font-semibold">{merchant}</span>
+              </div>
+            )}
             <Label htmlFor="samt">Amount (R)</Label>
             <Input
               id="samt"
@@ -806,25 +994,46 @@ function SpendDialog({
           </div>
         )}
 
-        {phase === "processing" && method !== "pin" && (
-          <div className="flex flex-col items-center gap-4 py-8">
-            {method === "tap" ? (
-              <div className="relative flex h-24 w-24 items-center justify-center">
-                <span className="absolute inset-0 animate-ping rounded-full bg-blue-500/30" />
-                <span
-                  className="absolute inset-3 animate-ping rounded-full bg-blue-500/40"
-                  style={{ animationDelay: "0.3s" }}
-                />
-                <Wifi className="relative h-10 w-10 rotate-90 text-blue-600" />
+        {phase === "scanning" && (
+          <div className="flex flex-col items-center gap-3 py-2">
+            <div className="relative h-64 w-full overflow-hidden rounded-xl bg-black">
+              <video
+                ref={videoRef}
+                className="h-full w-full object-cover"
+                playsInline
+                muted
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="h-44 w-44 rounded-lg border-2 border-white/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]" />
               </div>
-            ) : (
-              <div className="flex h-32 w-32 items-center justify-center rounded-lg border-4 border-dashed border-blue-500 bg-blue-50">
-                <QrCode className="h-16 w-16 text-blue-600 animate-pulse" />
-              </div>
-            )}
+            </div>
             <p className="text-sm text-muted-foreground">
-              {method === "tap" ? "Hold near terminal…" : "Scanning QR code…"}
+              Point camera at a payment QR code
             </p>
+          </div>
+        )}
+
+        {phase === "nfc" && (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <div className="relative flex h-28 w-28 items-center justify-center">
+              <span className="absolute inset-0 animate-ping rounded-full bg-blue-500/30" />
+              <span
+                className="absolute inset-3 animate-ping rounded-full bg-blue-500/40"
+                style={{ animationDelay: "0.3s" }}
+              />
+              <Wifi className="relative h-12 w-12 rotate-90 text-blue-600" />
+            </div>
+            <p className="text-sm font-medium">Tap to pay enabled</p>
+            <p className="text-xs text-muted-foreground text-center px-4">
+              {nfcStatus || "Hold your phone near a contactless terminal…"}
+            </p>
+          </div>
+        )}
+
+        {phase === "processing" && (
+          <div className="flex flex-col items-center gap-3 py-8">
+            <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+            <p className="text-sm text-muted-foreground">Authorising payment…</p>
           </div>
         )}
 
@@ -850,6 +1059,21 @@ function SpendDialog({
               Cancel
             </Button>
             <Button onClick={submit}>{method === "pin" ? "Generate PIN" : "Pay"}</Button>
+          </DialogFooter>
+        )}
+
+        {(phase === "scanning" || phase === "nfc") && (
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => {
+                reset();
+                onClose();
+              }}
+            >
+              Cancel
+            </Button>
           </DialogFooter>
         )}
       </DialogContent>
