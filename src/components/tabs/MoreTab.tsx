@@ -177,6 +177,7 @@ export function MoreTab() {
       </Section>
 
       <AddSubDialog open={subOpen} onOpenChange={setSubOpen} />
+      <EditProfileDialog open={editProfileOpen} onOpenChange={setEditProfileOpen} />
     </div>
   );
 }
