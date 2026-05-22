@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Palette, Star, Repeat, Trash2, Plus, Check, Pause, Play } from "lucide-react";
+import { Palette, Star, Repeat, Trash2, Plus, Check, Pause, Play, User, Pencil } from "lucide-react";
 import { useWallet, formatZAR, CARD_THEMES, type CardTheme, type SubInterval } from "@/lib/wallet-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,9 +20,25 @@ export function MoreTab() {
   const w = useWallet();
   const pwa = usePWAInstall();
   const [subOpen, setSubOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
 
   return (
     <div className="space-y-6">
+      <Section title="Account" icon={<User className="h-4 w-4" />}>
+        <div className="flex items-center gap-3 rounded-xl border bg-white dark:bg-slate-900 p-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-xs font-bold text-white">
+            {w.profile.initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold truncate">{w.profile.name}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{w.profile.email}</div>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setEditProfileOpen(true)}>
+            <Pencil className="h-3.5 w-3.5 mr-1" /> Edit
+          </Button>
+        </div>
+      </Section>
+
       <Section title="Card theme" icon={<Palette className="h-4 w-4" />}>
         <div className="grid grid-cols-3 gap-2">
           {(Object.entries(CARD_THEMES) as [CardTheme, { label: string; gradient: string }][]).map(
@@ -161,6 +177,7 @@ export function MoreTab() {
       </Section>
 
       <AddSubDialog open={subOpen} onOpenChange={setSubOpen} />
+      <EditProfileDialog open={editProfileOpen} onOpenChange={setEditProfileOpen} />
     </div>
   );
 }
@@ -263,6 +280,67 @@ function AddSubDialog({
           >
             Add
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditProfileDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (b: boolean) => void;
+}) {
+  const w = useWallet();
+  const [name, setName] = useState(w.profile.name);
+  const [email, setEmail] = useState(w.profile.email);
+  const [phone, setPhone] = useState(w.profile.phone);
+  const [initials, setInitials] = useState(w.profile.initials);
+
+  const initialsFromName = (n: string) =>
+    n
+      .split(" ")
+      .map((p) => p[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+
+  const save = () => {
+    const newInitials = initials.trim() || initialsFromName(name) || w.profile.initials;
+    w.updateProfile({ name: name.trim() || w.profile.name, email: email.trim() || w.profile.email, phone: phone.trim() || w.profile.phone, initials: newInitials });
+    toast.success("Profile updated");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit profile</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Full name</Label>
+            <Input value={name} onChange={(e) => { setName(e.target.value); if (!initials) setInitials(initialsFromName(e.target.value)); }} placeholder="Your name" />
+          </div>
+          <div>
+            <Label className="text-xs">Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" />
+          </div>
+          <div>
+            <Label className="text-xs">Phone</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+27 …" />
+          </div>
+          <div>
+            <Label className="text-xs">Initials</Label>
+            <Input value={initials} onChange={(e) => setInitials(e.target.value.slice(0, 2).toUpperCase())} placeholder="AM" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={save}>Save</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
