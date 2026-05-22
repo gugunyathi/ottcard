@@ -285,3 +285,64 @@ function AddSubDialog({
     </Dialog>
   );
 }
+
+function EditProfileDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (b: boolean) => void;
+}) {
+  const w = useWallet();
+  const [name, setName] = useState(w.profile.name);
+  const [email, setEmail] = useState(w.profile.email);
+  const [phone, setPhone] = useState(w.profile.phone);
+  const [initials, setInitials] = useState(w.profile.initials);
+
+  const initialsFromName = (n: string) =>
+    n
+      .split(" ")
+      .map((p) => p[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
+
+  const save = () => {
+    const newInitials = initials.trim() || initialsFromName(name) || w.profile.initials;
+    w.updateProfile({ name: name.trim() || w.profile.name, email: email.trim() || w.profile.email, phone: phone.trim() || w.profile.phone, initials: newInitials });
+    toast.success("Profile updated");
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit profile</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Full name</Label>
+            <Input value={name} onChange={(e) => { setName(e.target.value); if (!initials) setInitials(initialsFromName(e.target.value)); }} placeholder="Your name" />
+          </div>
+          <div>
+            <Label className="text-xs">Email</Label>
+            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" />
+          </div>
+          <div>
+            <Label className="text-xs">Phone</Label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+27 …" />
+          </div>
+          <div>
+            <Label className="text-xs">Initials</Label>
+            <Input value={initials} onChange={(e) => setInitials(e.target.value.slice(0, 2).toUpperCase())} placeholder="AM" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={save}>Save</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
