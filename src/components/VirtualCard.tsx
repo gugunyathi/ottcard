@@ -1,4 +1,5 @@
 import { CARD_THEMES, formatZAR, type CardTheme } from "@/lib/wallet-store";
+import ottLogo from "@/assets/ott-logo.png";
 
 export function VirtualCard({
   balance,
@@ -27,8 +28,8 @@ export function VirtualCard({
         />
         <div className="relative flex items-start justify-between">
           <div className="text-2xl font-bold tracking-tight">
-            ott<span className="font-light">voucher</span>
-            <sup className="ml-0.5 text-[8px] align-super">™</sup>
+            h<span className="font-light">OTT</span>card
+            <span className="ml-1">🔥</span>
           </div>
           <div className="flex h-8 w-8 items-center justify-center rounded bg-white/15 backdrop-blur">
             <span className="text-[10px] font-bold">PAY</span>
@@ -47,10 +48,7 @@ export function VirtualCard({
             </div>
             <div className="mt-1 text-[10px] opacity-80">•••• •••• •••• 4242</div>
           </div>
-          <div className="flex items-center">
-            <span className="block h-7 w-7 rounded-full bg-[#eb001b]" />
-            <span className="-ml-3 block h-7 w-7 rounded-full bg-[#f79e1b] mix-blend-screen" />
-          </div>
+          <img src={ottLogo} alt="OTT" className="h-8 w-auto object-contain" />
         </div>
       </div>
     </div>
